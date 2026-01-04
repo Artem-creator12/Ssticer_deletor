@@ -12,4 +12,3 @@ services:
         value: 10000
       - key: RENDER_EXTERNAL_URL
         value: https://ssticer-deletor.onrender.com
-    autoDeploy: true
