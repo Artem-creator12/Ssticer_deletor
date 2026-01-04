@@ -24,10 +24,7 @@ WEBHOOK_URL = os.environ.get('RENDER_EXTERNAL_URL', '')
 PORT = int(os.environ.get('PORT', 10000))
 
 logger.info("=" * 50)
-logger.info("🚀 Sticker Ban Bot (синхронная версия)")
-logger.info(f"🌐 PORT: {PORT}")
-logger.info(f"🔗 WEBHOOK_URL: {WEBHOOK_URL}")
-logger.info(f"🤖 BOT_TOKEN: {'установлен' if BOT_TOKEN else 'НЕТ'}")
+logger.info("🚀 Sticker Ban Bot (только админы)")
 logger.info("=" * 50)
 
 # Инициализация бота
@@ -44,7 +41,6 @@ class StickerBanBot:
     def __init__(self):
         self.banned_packs = {}
         self.load_data()
-        logger.info("✅ StickerBanBot создан")
     
     def load_data(self):
         """Загружает данные из файла"""
@@ -52,7 +48,6 @@ class StickerBanBot:
             if os.path.exists('data.json'):
                 with open('data.json', 'r') as f:
                     self.banned_packs = json.load(f)
-                    logger.info(f"📂 Загружено {len(self.banned_packs)} чатов")
         except Exception as e:
             logger.error(f"Ошибка загрузки: {e}")
             self.banned_packs = {}
@@ -68,6 +63,15 @@ class StickerBanBot:
 # Создаем экземпляр бота
 sticker_bot = StickerBanBot()
 
+def is_admin(chat_id, user_id):
+    """Проверяет, является ли пользователь администратором"""
+    try:
+        member = bot.get_chat_member(chat_id, user_id)
+        return member.status in ['creator', 'administrator']
+    except Exception as e:
+        logger.error(f"Ошибка проверки прав: {e}")
+        return False
+
 # ========== ОБРАБОТЧИКИ КОМАНД ==========
 @bot.message_handler(commands=['start'])
 def start_command(message):
@@ -76,24 +80,24 @@ def start_command(message):
         bot.reply_to(message,
             f"🤖 *Sticker Ban Bot*\n\n"
             f"Привет, {message.from_user.first_name}!\n\n"
-            "*Функции:*\n"
-            "• Запрет стикер-паков командой /stickban\n"
-            "• Автоудаление запрещенных стикеров\n"
-            "• Мут на 1 час за нарушение\n\n"
-            "⚡ Работает 24/7 на Render.com\n\n"
-            "Используйте /help для списка команд",
+            "*Функции для админов:*\n"
+            "• /stickban (ответ на стикер) - запретить пак\n"
+            "• /stickbanlist - список запрещенных\n"
+            "• /stickunban <название> - разблокировать\n\n"
+            "⚠️ *Наказание за нарушение:*\n"
+            "Запрещенный стикер = удаление + мут 1 час\n\n"
+            "⚡ Работает 24/7 на Render.com",
             parse_mode='Markdown'
         )
-        logger.info(f"Команда /start от {message.from_user.id}")
     except Exception as e:
         logger.error(f"Ошибка в /start: {e}")
 
 @bot.message_handler(commands=['help'])
 def help_command(message):
     """Обработчик команды /help"""
-    bot.reply_to(message,
-        "📚 *Доступные команды:*\n\n"
-        "*Для админов:*\n"
+    help_text = (
+        "📚 *Sticker Ban Bot - Помощь*\n\n"
+        "*Только для администраторов:*\n"
         "▫️ /stickban (ответ на стикер) - запретить весь пак\n"
         "▫️ /stickbanlist - список запрещенных паков\n"
         "▫️ /stickunban <название> - разблокировать пак\n\n"
@@ -101,16 +105,31 @@ def help_command(message):
         "▫️ /start - информация о боте\n"
         "▫️ /help - эта справка\n\n"
         "⚠️ *Наказание за нарушение:*\n"
+        "Отправка запрещенного стикера:\n"
         "• Сообщение удаляется\n"
         "• Мут на 1 час\n"
-        "• Уведомление в чат",
-        parse_mode='Markdown'
+        "• Уведомление в чат\n\n"
+        "*Требования:*\n"
+        "Бот должен быть администратором с правами:\n"
+        "✓ Удалять сообщения\n"
+        "✓ Блокировать пользователей"
     )
+    bot.reply_to(message, help_text, parse_mode='Markdown')
 
 @bot.message_handler(commands=['stickban'])
 def stickban_command(message):
-    """Команда /stickban - запретить стикер-пак"""
+    """Команда /stickban - запретить стикер-пак (только для админов)"""
     try:
+        # Проверяем что это группа
+        if message.chat.type == 'private':
+            bot.reply_to(message, "❌ Эта команда работает только в группах!")
+            return
+        
+        # Проверяем что отправитель - администратор
+        if not is_admin(message.chat.id, message.from_user.id):
+            bot.reply_to(message, "❌ Эта команда только для администраторов чата!")
+            return
+        
         # Проверяем что это ответ на стикер
         if not message.reply_to_message or not message.reply_to_message.sticker:
             bot.reply_to(message, "❌ Ответьте на стикер который хотите запретить!")
@@ -124,19 +143,19 @@ def stickban_command(message):
             return
         
         # Получаем ID чата
-        chat_id = str(message.chat.id)
+        chat_id_str = str(message.chat.id)
         
         # Инициализируем список для чата если нужно
-        if chat_id not in sticker_bot.banned_packs:
-            sticker_bot.banned_packs[chat_id] = []
+        if chat_id_str not in sticker_bot.banned_packs:
+            sticker_bot.banned_packs[chat_id_str] = []
         
         # Проверяем не запрещен ли уже пак
-        if pack_name in sticker_bot.banned_packs[chat_id]:
+        if pack_name in sticker_bot.banned_packs[chat_id_str]:
             bot.reply_to(message, f"❌ Стикер-пак '{pack_name}' уже запрещен!")
             return
         
         # Добавляем пак в запрещенные
-        sticker_bot.banned_packs[chat_id].append(pack_name)
+        sticker_bot.banned_packs[chat_id_str].append(pack_name)
         sticker_bot.save_data()
         
         # Пытаемся удалить оригинальный стикер
@@ -145,17 +164,27 @@ def stickban_command(message):
         except Exception as e:
             logger.warning(f"Не удалось удалить стикер: {e}")
         
+        # Удаляем команду тоже
+        try:
+            bot.delete_message(message.chat.id, message.message_id)
+        except:
+            pass
+        
         # Отправляем подтверждение
-        bot.reply_to(message,
+        confirmation = bot.send_message(
+            message.chat.id,
             f"✅ *Стикер-пак запрещён!*\n\n"
-            f"📛 *Название:* `{pack_name}`\n\n"
-            f"⚠️ Теперь отправка стикеров из этого пака наказывается:\n"
-            f"• Удаление сообщения\n"
-            f"• Мут на 1 час",
+            f"📛 *Название:* `{pack_name}`\n"
+            f"👤 *Администратор:* {message.from_user.first_name}\n\n"
+            f"⚠️ Отправка стикеров из этого пака теперь наказывается мутом на 1 час!",
             parse_mode='Markdown'
         )
         
-        logger.info(f"Пак '{pack_name}' запрещен в чате {chat_id}")
+        # Удаляем подтверждение через 10 секунд
+        threading.Thread(target=delete_message_after_delay, 
+                       args=(message.chat.id, confirmation.message_id, 10)).start()
+        
+        logger.info(f"Пак '{pack_name}' запрещен в чате {chat_id_str} админом {message.from_user.id}")
         
     except Exception as e:
         logger.error(f"Ошибка в команде /stickban: {e}")
@@ -165,10 +194,10 @@ def stickban_command(message):
 def stickbanlist_command(message):
     """Команда /stickbanlist - список запрещенных паков"""
     try:
-        chat_id = str(message.chat.id)
+        chat_id_str = str(message.chat.id)
         
-        if chat_id in sticker_bot.banned_packs and sticker_bot.banned_packs[chat_id]:
-            packs = "\n".join([f"• `{pack}`" for pack in sticker_bot.banned_packs[chat_id]])
+        if chat_id_str in sticker_bot.banned_packs and sticker_bot.banned_packs[chat_id_str]:
+            packs = "\n".join([f"• `{pack}`" for pack in sticker_bot.banned_packs[chat_id_str]])
             bot.reply_to(message,
                 f"📋 *Запрещенные стикер-паки в этом чате:*\n\n{packs}",
                 parse_mode='Markdown'
@@ -182,8 +211,18 @@ def stickbanlist_command(message):
 
 @bot.message_handler(commands=['stickunban'])
 def stickunban_command(message):
-    """Команда /stickunban - разблокировать пак"""
+    """Команда /stickunban - разблокировать пак (только для админов)"""
     try:
+        # Проверяем что это группа
+        if message.chat.type == 'private':
+            bot.reply_to(message, "❌ Эта команда работает только в группах!")
+            return
+        
+        # Проверяем что отправитель - администратор
+        if not is_admin(message.chat.id, message.from_user.id):
+            bot.reply_to(message, "❌ Эта команда только для администраторов чата!")
+            return
+        
         # Получаем аргументы команды
         if not message.text or len(message.text.split()) < 2:
             bot.reply_to(message, "❌ Укажите название пака:\n`/stickunban pack_name`", parse_mode='Markdown')
@@ -191,13 +230,26 @@ def stickunban_command(message):
         
         # Извлекаем название пака
         pack_name = ' '.join(message.text.split()[1:])
-        chat_id = str(message.chat.id)
+        chat_id_str = str(message.chat.id)
         
-        if chat_id in sticker_bot.banned_packs and pack_name in sticker_bot.banned_packs[chat_id]:
-            sticker_bot.banned_packs[chat_id].remove(pack_name)
+        if chat_id_str in sticker_bot.banned_packs and pack_name in sticker_bot.banned_packs[chat_id_str]:
+            sticker_bot.banned_packs[chat_id_str].remove(pack_name)
             sticker_bot.save_data()
-            bot.reply_to(message, f"✅ Стикер-пак `{pack_name}` разблокирован!", parse_mode='Markdown')
-            logger.info(f"Пак '{pack_name}' разблокирован в чате {chat_id}")
+            
+            # Удаляем команду
+            try:
+                bot.delete_message(message.chat.id, message.message_id)
+            except:
+                pass
+            
+            bot.send_message(
+                message.chat.id,
+                f"✅ *Стикер-пак разблокирован!*\n\n"
+                f"📛 *Название:* `{pack_name}`\n"
+                f"👤 *Администратор:* {message.from_user.first_name}",
+                parse_mode='Markdown'
+            )
+            logger.info(f"Пак '{pack_name}' разблокирован в чате {chat_id_str} админом {message.from_user.id}")
         else:
             bot.reply_to(message, "❌ Этот стикер-пак не был запрещён.")
             
@@ -213,11 +265,11 @@ def handle_sticker(message):
         if message.chat.type == 'private':
             return
         
-        chat_id = str(message.chat.id)
+        chat_id_str = str(message.chat.id)
         pack_name = message.sticker.set_name
         
         # Проверяем запрещен ли этот пак
-        if chat_id in sticker_bot.banned_packs and pack_name in sticker_bot.banned_packs[chat_id]:
+        if chat_id_str in sticker_bot.banned_packs and pack_name in sticker_bot.banned_packs[chat_id_str]:
             # Удаляем стикер
             try:
                 bot.delete_message(message.chat.id, message.message_id)
@@ -269,7 +321,7 @@ def handle_sticker(message):
             threading.Thread(target=delete_message_after_delay, 
                            args=(message.chat.id, warning_msg.message_id, 15)).start()
             
-            logger.info(f"Пользователь {message.from_user.id} получил мут за пак '{pack_name}' в чате {chat_id}")
+            logger.info(f"Пользователь {message.from_user.id} получил мут за пак '{pack_name}' в чате {chat_id_str}")
             
     except Exception as e:
         logger.error(f"Ошибка обработки стикера: {e}")
@@ -285,122 +337,60 @@ def delete_message_after_delay(chat_id, message_id, delay):
 # ========== FLASK МАРШРУТЫ ==========
 @app.route('/')
 def home():
-    """Главная страница"""
     return jsonify({
         "status": "online",
-        "service": "Telegram Sticker Ban Bot",
-        "bot_ready": bot is not None,
-        "message": "✅ Сервис работает!",
-        "endpoints": ["/", "/health", "/set_webhook", "/info"]
+        "service": "Sticker Ban Bot (админы только)",
+        "message": "✅ Сервис работает"
     })
 
 @app.route('/health')
 def health():
-    """Health check для Render"""
-    return jsonify({
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat()
-    })
+    return jsonify({"status": "healthy"})
 
 @app.route('/set_webhook')
 def set_webhook():
-    """Устанавливает webhook для Telegram"""
-    if not WEBHOOK_URL:
-        return jsonify({
-            "error": "RENDER_EXTERNAL_URL не установлен",
-            "fix": "Добавьте в Environment Variables: RENDER_EXTERNAL_URL=https://ssticer-deletor.onrender.com"
-        }), 400
-    
-    if not bot:
-        return jsonify({
-            "error": "Telegram бот не инициализирован",
-            "fix": "Проверьте TELEGRAM_BOT_TOKEN в Environment Variables"
-        }), 500
+    if not WEBHOOK_URL or not bot:
+        return jsonify({"error": "Не настроено"}), 400
     
     try:
-        # Устанавливаем webhook
         webhook_url = f"{WEBHOOK_URL}/webhook"
-        
-        # Удаляем старый webhook если есть
         bot.remove_webhook()
         time.sleep(1)
-        
-        # Устанавливаем новый webhook
         bot.set_webhook(url=webhook_url)
-        
-        logger.info(f"✅ Webhook установлен: {webhook_url}")
-        
         return jsonify({
             "status": "success",
-            "message": "✅ Webhook успешно установлен!",
-            "webhook_url": webhook_url,
-            "next_steps": [
-                "1. Откройте Telegram и найдите вашего бота",
-                "2. Напишите команду /start для проверки",
-                "3. Добавьте бота в группу",
-                "4. Дайте права администратора (удалять сообщения, банить)",
-                "5. Ответьте /stickban на стикер для тестирования"
-            ]
+            "message": "✅ Webhook установлен!",
+            "webhook_url": webhook_url
         })
-        
     except Exception as e:
-        logger.error(f"❌ Ошибка установки webhook: {e}")
-        return jsonify({
-            "error": str(e),
-            "hint": "Проверьте токен и перезапустите сервис"
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/webhook', methods=['POST'])
 def webhook_handler():
-    """Обработчик входящих обновлений от Telegram"""
     if not bot:
         return jsonify({"error": "Бот не инициализирован"}), 500
     
     try:
-        # Получаем данные от Telegram
         json_data = request.get_json(force=True)
-        
-        # Создаем объект Update из данных
         update = telebot.types.Update.de_json(json_data)
-        
-        # Обрабатываем обновление
         bot.process_new_updates([update])
-        
         return jsonify({"status": "ok"})
-        
     except Exception as e:
-        logger.error(f"❌ Ошибка webhook: {e}")
+        logger.error(f"Webhook error: {e}")
         return jsonify({"error": str(e)}), 400
-
-@app.route('/info')
-def info():
-    """Информация о сервисе"""
-    return jsonify({
-        "service_url": "https://ssticer-deletor.onrender.com",
-        "webhook_url": f"{WEBHOOK_URL}/webhook" if WEBHOOK_URL else "не установлен",
-        "bot_token": "установлен" if BOT_TOKEN else "не установлен",
-        "bot_initialized": bot is not None,
-        "chats_with_bans": len(sticker_bot.banned_packs),
-        "time": datetime.now().isoformat()
-    })
 
 # ========== ЗАПУСК СЕРВИСА ==========
 if __name__ == '__main__':
-    logger.info("=" * 50)
-    logger.info("🚀 Запуск Sticker Ban Bot")
-    logger.info("=" * 50)
+    logger.info("🚀 Запуск бота...")
     
-    # Если есть webhook URL, устанавливаем его
     if bot and WEBHOOK_URL:
         try:
             webhook_url = f"{WEBHOOK_URL}/webhook"
             bot.remove_webhook()
             time.sleep(1)
             bot.set_webhook(url=webhook_url)
-            logger.info(f"✅ Webhook установлен при запуске: {webhook_url}")
+            logger.info(f"✅ Webhook установлен: {webhook_url}")
         except Exception as e:
-            logger.error(f"❌ Ошибка установки webhook при запуске: {e}")
+            logger.error(f"Ошибка установки webhook: {e}")
     
-    # Запускаем Flask
-    logger.info(f"🌐 Сервис запущен на порту {PORT}")
     app.run(host='0.0.0.0', port=PORT, debug=False)
