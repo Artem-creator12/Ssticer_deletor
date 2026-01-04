@@ -231,18 +231,14 @@ def unmute_command(message):
                 until_date=0  # 0 = снять ограничения немедленно
             )
             
-            # Отправляем подтверждение (НЕ удаляем команду администратора)
-            confirmation = bot.send_message(
+            # Отправляем подтверждение (НЕ удаляем)
+            bot.send_message(
                 message.chat.id,
                 f"✅ *Мут снят!*\n\n"
                 f"👤 *Пользователь:* {target_username}\n"
                 f"👮 *Администратор:* {message.from_user.first_name}",
                 parse_mode='Markdown'
             )
-            
-            # Удаляем только подтверждение через 10 секунд
-            threading.Thread(target=delete_message_after_delay, 
-                           args=(message.chat.id, confirmation.message_id, 10)).start()
             
             logger.info(f"Мут снят с пользователя {target_user_id} в чате {message.chat.id} админом {message.from_user.id}")
             
@@ -302,8 +298,8 @@ def stickban_command(message):
         except Exception as e:
             logger.warning(f"Не удалось удалить стикер: {e}")
         
-        # Отправляем подтверждение (НЕ удаляем команду администратора)
-        confirmation = bot.send_message(
+        # Отправляем подтверждение и НЕ УДАЛЯЕМ ЕГО
+        bot.send_message(
             message.chat.id,
             f"✅ *Стикер-пак запрещён!*\n\n"
             f"📛 *Название:* `{pack_name}`\n"
@@ -311,10 +307,6 @@ def stickban_command(message):
             f"⚠️ Отправка стикеров из этого пака теперь наказывается мутом на 1 час!",
             parse_mode='Markdown'
         )
-        
-        # Удаляем только подтверждение через 10 секунд
-        threading.Thread(target=delete_message_after_delay, 
-                       args=(message.chat.id, confirmation.message_id, 10)).start()
         
         logger.info(f"Пак '{pack_name}' запрещен в чате {chat_id_str} админом {message.from_user.id}")
         
@@ -368,7 +360,7 @@ def stickunban_command(message):
             sticker_bot.banned_packs[chat_id_str].remove(pack_name)
             sticker_bot.save_data()
             
-            # Отправляем подтверждение (НЕ удаляем команду администратора)
+            # Отправляем подтверждение (НЕ удаляем)
             bot.send_message(
                 message.chat.id,
                 f"✅ *Стикер-пак разблокирован!*\n\n"
@@ -422,19 +414,16 @@ def handle_sticker(message):
                 )
             except Exception as e:
                 logger.error(f"Не удалось замутить пользователя: {e}")
-                # Если не удалось замутить, хотя бы предупредим
-                warning = bot.send_message(
+                # Если не удалось замутить, хотя бы предупредим (и не удаляем это предупреждение)
+                bot.send_message(
                     message.chat.id,
                     f"⚠️ {message.from_user.first_name}, этот стикер-пак запрещён!",
                     parse_mode='HTML'
                 )
-                # Удаляем предупреждение через 5 секунд
-                threading.Thread(target=delete_message_after_delay, 
-                               args=(message.chat.id, warning.message_id, 5)).start()
                 return
             
-            # Отправляем уведомление о муте
-            warning_msg = bot.send_message(
+            # Отправляем уведомление о муте (НЕ УДАЛЯЕМ ЕГО)
+            bot.send_message(
                 message.chat.id,
                 f"🚫 *Нарушение правил!*\n\n"
                 f"👤 *Пользователь:* {message.from_user.first_name}\n"
@@ -445,22 +434,10 @@ def handle_sticker(message):
                 parse_mode='Markdown'
             )
             
-            # Удаляем уведомление через 15 секунд
-            threading.Thread(target=delete_message_after_delay, 
-                           args=(message.chat.id, warning_msg.message_id, 15)).start()
-            
             logger.info(f"Пользователь {message.from_user.id} получил мут за пак '{pack_name}' в чате {chat_id_str}")
             
     except Exception as e:
         logger.error(f"Ошибка обработки стикера: {e}")
-
-def delete_message_after_delay(chat_id, message_id, delay):
-    """Удаляет сообщение через указанную задержку"""
-    time.sleep(delay)
-    try:
-        bot.delete_message(chat_id, message_id)
-    except:
-        pass
 
 # ========== FLASK МАРШРУТЫ ==========
 @app.route('/')
