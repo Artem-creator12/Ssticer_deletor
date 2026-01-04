@@ -24,7 +24,7 @@ WEBHOOK_URL = os.environ.get('RENDER_EXTERNAL_URL', '')
 PORT = int(os.environ.get('PORT', 10000))
 
 logger.info("=" * 50)
-logger.info("🚀 Sticker Ban Bot (только админы)")
+logger.info("🚀 Sticker Ban Bot (с командой /unmute)")
 logger.info("=" * 50)
 
 # Инициализация бота
@@ -72,6 +72,19 @@ def is_admin(chat_id, user_id):
         logger.error(f"Ошибка проверки прав: {e}")
         return False
 
+def get_full_permissions():
+    """Возвращает полные права для пользователя"""
+    return ChatPermissions(
+        can_send_messages=True,
+        can_send_media_messages=True,
+        can_send_polls=True,
+        can_send_other_messages=True,
+        can_add_web_page_previews=True,
+        can_change_info=False,
+        can_invite_users=True,
+        can_pin_messages=False
+    )
+
 # ========== ОБРАБОТЧИКИ КОМАНД ==========
 @bot.message_handler(commands=['start'])
 def start_command(message):
@@ -83,7 +96,8 @@ def start_command(message):
             "*Функции для админов:*\n"
             "• /stickban (ответ на стикер) - запретить пак\n"
             "• /stickbanlist - список запрещенных\n"
-            "• /stickunban <название> - разблокировать\n\n"
+            "• /stickunban <название> - разблокировать\n"
+            "• /unmute @username - снять мут с пользователя\n\n"
             "⚠️ *Наказание за нарушение:*\n"
             "Запрещенный стикер = удаление + мут 1 час\n\n"
             "⚡ Работает 24/7 на Render.com",
@@ -100,7 +114,8 @@ def help_command(message):
         "*Только для администраторов:*\n"
         "▫️ /stickban (ответ на стикер) - запретить весь пак\n"
         "▫️ /stickbanlist - список запрещенных паков\n"
-        "▫️ /stickunban <название> - разблокировать пак\n\n"
+        "▫️ /stickunban <название> - разблокировать пак\n"
+        "▫️ /unmute @username - снять мут с пользователя\n\n"
         "*Для всех:*\n"
         "▫️ /start - информация о боте\n"
         "▫️ /help - эта справка\n\n"
@@ -112,9 +127,139 @@ def help_command(message):
         "*Требования:*\n"
         "Бот должен быть администратором с правами:\n"
         "✓ Удалять сообщения\n"
-        "✓ Блокировать пользователей"
+        "✓ Блокировать пользователей\n"
+        "✓ Размучивать пользователей"
     )
     bot.reply_to(message, help_text, parse_mode='Markdown')
+
+@bot.message_handler(commands=['unmute'])
+def unmute_command(message):
+    """Команда /unmute - снять мут с пользователя (только для админов)"""
+    try:
+        # Проверяем что это группа
+        if message.chat.type == 'private':
+            bot.reply_to(message, "❌ Эта команда работает только в группах!")
+            return
+        
+        # Проверяем что отправитель - администратор
+        if not is_admin(message.chat.id, message.from_user.id):
+            bot.reply_to(message, "❌ Эта команда только для администраторов чата!")
+            return
+        
+        # Проверяем аргументы команды
+        if not message.text or len(message.text.split()) < 2:
+            bot.reply_to(message, 
+                "❌ Укажите пользователя:\n"
+                "`/unmute @username` - по юзернейму\n"
+                "`/unmute` (ответ на сообщение) - по ответу",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Определяем пользователя для размута
+        target_user_id = None
+        target_username = None
+        
+        # Вариант 1: Ответ на сообщение пользователя
+        if message.reply_to_message and message.reply_to_message.from_user:
+            target_user_id = message.reply_to_message.from_user.id
+            target_username = message.reply_to_message.from_user.username or message.reply_to_message.from_user.first_name
+        
+        # Вариант 2: По юзернейму (@username)
+        elif '@' in message.text:
+            username = message.text.split('@')[1].split()[0]  # Извлекаем юзернейм
+            username = username.strip()
+            
+            # Ищем пользователя по юзернейму в чате
+            try:
+                # Получаем информацию о пользователе
+                chat_member = bot.get_chat_member(message.chat.id, f"@{username}")
+                target_user_id = chat_member.user.id
+                target_username = chat_member.user.username or chat_member.user.first_name
+            except Exception as e:
+                logger.error(f"Не найден пользователь @{username}: {e}")
+                bot.reply_to(message, f"❌ Пользователь @{username} не найден в этом чате!")
+                return
+        
+        # Вариант 3: По ID пользователя (если указан числовой ID)
+        else:
+            parts = message.text.split()
+            if len(parts) >= 2 and parts[1].isdigit():
+                target_user_id = int(parts[1])
+                try:
+                    chat_member = bot.get_chat_member(message.chat.id, target_user_id)
+                    target_username = chat_member.user.username or chat_member.user.first_name
+                except Exception as e:
+                    logger.error(f"Не найден пользователь ID {target_user_id}: {e}")
+                    bot.reply_to(message, f"❌ Пользователь с ID {target_user_id} не найден в этом чате!")
+                    return
+        
+        if not target_user_id:
+            bot.reply_to(message, 
+                "❌ Не удалось определить пользователя.\n"
+                "Используйте:\n"
+                "• `/unmute @username`\n"
+                "• Ответьте `/unmute` на сообщение пользователя",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Проверяем что не пытаемся размутить себя (бота)
+        if target_user_id == bot.get_me().id:
+            bot.reply_to(message, "❌ Не могу размутить самого себя!")
+            return
+        
+        # Проверяем что не пытаемся размутить администратора (если мы не создатель)
+        try:
+            target_member = bot.get_chat_member(message.chat.id, target_user_id)
+            if target_member.status in ['administrator', 'creator']:
+                # Проверяем что мы создатель, чтобы размутить админа
+                requester = bot.get_chat_member(message.chat.id, message.from_user.id)
+                if requester.status != 'creator':
+                    bot.reply_to(message, "❌ Не могу размутить администратора!")
+                    return
+        except:
+            pass
+        
+        # Снимаем мут (устанавливаем полные права)
+        full_permissions = get_full_permissions()
+        
+        try:
+            bot.restrict_chat_member(
+                message.chat.id,
+                target_user_id,
+                permissions=full_permissions,
+                until_date=0  # 0 = снять ограничения немедленно
+            )
+            
+            # Удаляем команду
+            try:
+                bot.delete_message(message.chat.id, message.message_id)
+            except:
+                pass
+            
+            # Отправляем подтверждение
+            confirmation = bot.send_message(
+                message.chat.id,
+                f"✅ *Мут снят!*\n\n"
+                f"👤 *Пользователь:* {target_username}\n"
+                f"👮 *Администратор:* {message.from_user.first_name}",
+                parse_mode='Markdown'
+            )
+            
+            # Удаляем подтверждение через 10 секунд
+            threading.Thread(target=delete_message_after_delay, 
+                           args=(message.chat.id, confirmation.message_id, 10)).start()
+            
+            logger.info(f"Мут снят с пользователя {target_user_id} в чате {message.chat.id} админом {message.from_user.id}")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при снятии мута: {e}")
+            bot.reply_to(message, f"❌ Не удалось снять мут. Убедитесь что пользователь замучен и у бота есть права!")
+            
+    except Exception as e:
+        logger.error(f"Ошибка в команде /unmute: {e}")
+        bot.reply_to(message, "❌ Произошла ошибка. Проверьте права бота!")
 
 @bot.message_handler(commands=['stickban'])
 def stickban_command(message):
@@ -279,7 +424,7 @@ def handle_sticker(message):
             
             # Даем мут на 1 час
             until_date = datetime.now() + timedelta(hours=1)
-            permissions = ChatPermissions(
+            mute_permissions = ChatPermissions(
                 can_send_messages=False,
                 can_send_media_messages=False,
                 can_send_other_messages=False,
@@ -290,7 +435,7 @@ def handle_sticker(message):
                 bot.restrict_chat_member(
                     message.chat.id,
                     message.from_user.id,
-                    permissions=permissions,
+                    permissions=mute_permissions,
                     until_date=until_date
                 )
             except Exception as e:
@@ -313,7 +458,8 @@ def handle_sticker(message):
                 f"👤 *Пользователь:* {message.from_user.first_name}\n"
                 f"⏰ *Наказание:* мут на 1 час\n"
                 f"📛 *Причина:* отправка запрещенного стикера\n"
-                f"🖼 *Пак:* `{pack_name}`",
+                f"🖼 *Пак:* `{pack_name}`\n\n"
+                f"_Администратор может снять мут командой /unmute_",
                 parse_mode='Markdown'
             )
             
@@ -339,7 +485,7 @@ def delete_message_after_delay(chat_id, message_id, delay):
 def home():
     return jsonify({
         "status": "online",
-        "service": "Sticker Ban Bot (админы только)",
+        "service": "Sticker Ban Bot (с /unmute)",
         "message": "✅ Сервис работает"
     })
 
