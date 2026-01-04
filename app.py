@@ -24,7 +24,7 @@ WEBHOOK_URL = os.environ.get('RENDER_EXTERNAL_URL', '')
 PORT = int(os.environ.get('PORT', 10000))
 
 logger.info("=" * 50)
-logger.info("🚀 Sticker Ban Bot (с командой /unmute)")
+logger.info("🚀 Sticker Ban Bot")
 logger.info("=" * 50)
 
 # Инициализация бота
@@ -172,7 +172,6 @@ def unmute_command(message):
             
             # Ищем пользователя по юзернейму в чате
             try:
-                # Получаем информацию о пользователе
                 chat_member = bot.get_chat_member(message.chat.id, f"@{username}")
                 target_user_id = chat_member.user.id
                 target_username = chat_member.user.username or chat_member.user.first_name
@@ -232,13 +231,7 @@ def unmute_command(message):
                 until_date=0  # 0 = снять ограничения немедленно
             )
             
-            # Удаляем команду
-            try:
-                bot.delete_message(message.chat.id, message.message_id)
-            except:
-                pass
-            
-            # Отправляем подтверждение
+            # Отправляем подтверждение (НЕ удаляем команду администратора)
             confirmation = bot.send_message(
                 message.chat.id,
                 f"✅ *Мут снят!*\n\n"
@@ -247,7 +240,7 @@ def unmute_command(message):
                 parse_mode='Markdown'
             )
             
-            # Удаляем подтверждение через 10 секунд
+            # Удаляем только подтверждение через 10 секунд
             threading.Thread(target=delete_message_after_delay, 
                            args=(message.chat.id, confirmation.message_id, 10)).start()
             
@@ -303,19 +296,13 @@ def stickban_command(message):
         sticker_bot.banned_packs[chat_id_str].append(pack_name)
         sticker_bot.save_data()
         
-        # Пытаемся удалить оригинальный стикер
+        # Удаляем только оригинальный стикер (не команду админа!)
         try:
             bot.delete_message(message.chat.id, message.reply_to_message.message_id)
         except Exception as e:
             logger.warning(f"Не удалось удалить стикер: {e}")
         
-        # Удаляем команду тоже
-        try:
-            bot.delete_message(message.chat.id, message.message_id)
-        except:
-            pass
-        
-        # Отправляем подтверждение
+        # Отправляем подтверждение (НЕ удаляем команду администратора)
         confirmation = bot.send_message(
             message.chat.id,
             f"✅ *Стикер-пак запрещён!*\n\n"
@@ -325,7 +312,7 @@ def stickban_command(message):
             parse_mode='Markdown'
         )
         
-        # Удаляем подтверждение через 10 секунд
+        # Удаляем только подтверждение через 10 секунд
         threading.Thread(target=delete_message_after_delay, 
                        args=(message.chat.id, confirmation.message_id, 10)).start()
         
@@ -381,12 +368,7 @@ def stickunban_command(message):
             sticker_bot.banned_packs[chat_id_str].remove(pack_name)
             sticker_bot.save_data()
             
-            # Удаляем команду
-            try:
-                bot.delete_message(message.chat.id, message.message_id)
-            except:
-                pass
-            
+            # Отправляем подтверждение (НЕ удаляем команду администратора)
             bot.send_message(
                 message.chat.id,
                 f"✅ *Стикер-пак разблокирован!*\n\n"
@@ -415,7 +397,7 @@ def handle_sticker(message):
         
         # Проверяем запрещен ли этот пак
         if chat_id_str in sticker_bot.banned_packs and pack_name in sticker_bot.banned_packs[chat_id_str]:
-            # Удаляем стикер
+            # Удаляем стикер (нарушителя)
             try:
                 bot.delete_message(message.chat.id, message.message_id)
             except Exception as e:
@@ -485,7 +467,7 @@ def delete_message_after_delay(chat_id, message_id, delay):
 def home():
     return jsonify({
         "status": "online",
-        "service": "Sticker Ban Bot (с /unmute)",
+        "service": "Sticker Ban Bot",
         "message": "✅ Сервис работает"
     })
 
