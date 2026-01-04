@@ -22,9 +22,10 @@ app = Flask(__name__)
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 WEBHOOK_URL = os.environ.get('RENDER_EXTERNAL_URL', '')
 PORT = int(os.environ.get('PORT', 10000))
+BOT_USERNAME = "Nazuna_chan_bot"  # Замените на реальное имя вашего бота
 
 logger.info("=" * 50)
-logger.info("🚀 Sticker Ban Bot")
+logger.info("🚀 🌸 Помощница Назуна-чан 🌸")
 logger.info("=" * 50)
 
 # Инициализация бота
@@ -85,19 +86,37 @@ def get_full_permissions():
         can_pin_messages=False
     )
 
+def check_command(text, command_variants):
+    """Проверяет текст на наличие команды (без /)"""
+    if not text:
+        return False
+    
+    text_lower = text.lower().strip()
+    
+    # Удаляем упоминание бота если есть
+    if f"@{BOT_USERNAME}".lower() in text_lower:
+        text_lower = text_lower.replace(f"@{BOT_USERNAME}".lower(), "").strip()
+    
+    # Проверяем все варианты команд
+    for variant in command_variants:
+        if text_lower == variant.lower():
+            return True
+    
+    return False
+
 # ========== ОБРАБОТЧИКИ КОМАНД ==========
 @bot.message_handler(commands=['start'])
 def start_command(message):
     """Обработчик команды /start"""
     try:
         bot.reply_to(message,
-            f"🤖 *Sticker Ban Bot*\n\n"
+            f"🌸 *Помощница Назуна-чан* 🌸\n\n"
             f"Привет, {message.from_user.first_name}!\n\n"
             "*Функции для админов:*\n"
-            "• /stickban (ответ на стикер) - запретить пак\n"
-            "• /stickbanlist - список запрещенных\n"
-            "• /stickunban <название> - разблокировать\n"
-            "• /unmute @username - снять мут с пользователя\n\n"
+            "• `stickban` (ответ на стикер) - запретить пак\n"
+            "• `stickbanlist` - список запрещенных\n"
+            "• `stickunban <название>` - разблокировать\n"
+            "• `unmute @username` - снять мут с пользователя\n\n"
             "⚠️ *Наказание за нарушение:*\n"
             "Запрещенный стикер = удаление + мут 1 час\n\n"
             "⚡ Работает 24/7 на Render.com",
@@ -110,12 +129,12 @@ def start_command(message):
 def help_command(message):
     """Обработчик команды /help"""
     help_text = (
-        "📚 *Sticker Ban Bot - Помощь*\n\n"
+        "📚 🌸 *Помощница Назуна-чан* 🌸 - Помощь\n\n"
         "*Только для администраторов:*\n"
-        "▫️ /stickban (ответ на стикер) - запретить весь пак\n"
-        "▫️ /stickbanlist - список запрещенных паков\n"
-        "▫️ /stickunban <название> - разблокировать пак\n"
-        "▫️ /unmute @username - снять мут с пользователя\n\n"
+        "▫️ `stickban` (ответ на стикер) - запретить весь пак\n"
+        "▫️ `stickbanlist` - список запрещенных паков\n"
+        "▫️ `stickunban <название>` - разблокировать пак\n"
+        "▫️ `unmute @username` - снять мут с пользователя\n\n"
         "*Для всех:*\n"
         "▫️ /start - информация о боте\n"
         "▫️ /help - эта справка\n\n"
@@ -132,9 +151,10 @@ def help_command(message):
     )
     bot.reply_to(message, help_text, parse_mode='Markdown')
 
-@bot.message_handler(commands=['unmute'])
-def unmute_command(message):
-    """Команда /unmute - снять мут с пользователя (только для админов)"""
+# ========== ОБРАБОТКА ОБЫЧНЫХ КОМАНД (без /) ==========
+
+def handle_unmute_command(message):
+    """Команда unmute - снять мут с пользователя (только для админов)"""
     try:
         # Проверяем что это группа
         if message.chat.type == 'private':
@@ -146,16 +166,6 @@ def unmute_command(message):
             bot.reply_to(message, "❌ Эта команда только для администраторов чата!")
             return
         
-        # Проверяем аргументы команды
-        if not message.text or len(message.text.split()) < 2:
-            bot.reply_to(message, 
-                "❌ Укажите пользователя:\n"
-                "`/unmute @username` - по юзернейму\n"
-                "`/unmute` (ответ на сообщение) - по ответу",
-                parse_mode='Markdown'
-            )
-            return
-        
         # Определяем пользователя для размута
         target_user_id = None
         target_username = None
@@ -165,26 +175,30 @@ def unmute_command(message):
             target_user_id = message.reply_to_message.from_user.id
             target_username = message.reply_to_message.from_user.username or message.reply_to_message.from_user.first_name
         
-        # Вариант 2: По юзернейму (@username)
+        # Вариант 2: По юзернейму (@username) в тексте
         elif '@' in message.text:
-            username = message.text.split('@')[1].split()[0]  # Извлекаем юзернейм
-            username = username.strip()
-            
-            # Ищем пользователя по юзернейму в чате
-            try:
-                chat_member = bot.get_chat_member(message.chat.id, f"@{username}")
-                target_user_id = chat_member.user.id
-                target_username = chat_member.user.username or chat_member.user.first_name
-            except Exception as e:
-                logger.error(f"Не найден пользователь @{username}: {e}")
-                bot.reply_to(message, f"❌ Пользователь @{username} не найден в этом чате!")
-                return
+            # Ищем юзернейм в тексте
+            import re
+            username_match = re.search(r'@(\w+)', message.text)
+            if username_match:
+                username = username_match.group(1)
+                # Ищем пользователя по юзернейму в чате
+                try:
+                    chat_member = bot.get_chat_member(message.chat.id, f"@{username}")
+                    target_user_id = chat_member.user.id
+                    target_username = chat_member.user.username or chat_member.user.first_name
+                except Exception as e:
+                    logger.error(f"Не найден пользователь @{username}: {e}")
+                    bot.reply_to(message, f"❌ Пользователь @{username} не найден в этом чате!")
+                    return
         
         # Вариант 3: По ID пользователя (если указан числовой ID)
         else:
-            parts = message.text.split()
-            if len(parts) >= 2 and parts[1].isdigit():
-                target_user_id = int(parts[1])
+            # Пытаемся найти ID в тексте
+            import re
+            id_match = re.search(r'(\d+)', message.text)
+            if id_match:
+                target_user_id = int(id_match.group(1))
                 try:
                     chat_member = bot.get_chat_member(message.chat.id, target_user_id)
                     target_username = chat_member.user.username or chat_member.user.first_name
@@ -197,8 +211,8 @@ def unmute_command(message):
             bot.reply_to(message, 
                 "❌ Не удалось определить пользователя.\n"
                 "Используйте:\n"
-                "• `/unmute @username`\n"
-                "• Ответьте `/unmute` на сообщение пользователя",
+                "• `unmute @username`\n"
+                "• Ответьте `unmute` на сообщение пользователя",
                 parse_mode='Markdown'
             )
             return
@@ -234,7 +248,7 @@ def unmute_command(message):
             # Отправляем подтверждение (НЕ удаляем)
             bot.send_message(
                 message.chat.id,
-                f"✅ *Мут снят!*\n\n"
+                f"✅ *Мут снят!* 🌸\n\n"
                 f"👤 *Пользователь:* {target_username}\n"
                 f"👮 *Администратор:* {message.from_user.first_name}",
                 parse_mode='Markdown'
@@ -247,12 +261,11 @@ def unmute_command(message):
             bot.reply_to(message, f"❌ Не удалось снять мут. Убедитесь что пользователь замучен и у бота есть права!")
             
     except Exception as e:
-        logger.error(f"Ошибка в команде /unmute: {e}")
+        logger.error(f"Ошибка в команде unmute: {e}")
         bot.reply_to(message, "❌ Произошла ошибка. Проверьте права бота!")
 
-@bot.message_handler(commands=['stickban'])
-def stickban_command(message):
-    """Команда /stickban - запретить стикер-пак (только для админов)"""
+def handle_stickban_command(message):
+    """Команда stickban - запретить стикер-пак (только для админов)"""
     try:
         # Проверяем что это группа
         if message.chat.type == 'private':
@@ -301,7 +314,7 @@ def stickban_command(message):
         # Отправляем подтверждение и НЕ УДАЛЯЕМ ЕГО
         bot.send_message(
             message.chat.id,
-            f"✅ *Стикер-пак запрещён!*\n\n"
+            f"🌸 *Стикер-пак запрещён!* 🌸\n\n"
             f"📛 *Название:* `{pack_name}`\n"
             f"👤 *Администратор:* {message.from_user.first_name}\n\n"
             f"⚠️ Отправка стикеров из этого пака теперь наказывается мутом на 1 час!",
@@ -311,31 +324,29 @@ def stickban_command(message):
         logger.info(f"Пак '{pack_name}' запрещен в чате {chat_id_str} админом {message.from_user.id}")
         
     except Exception as e:
-        logger.error(f"Ошибка в команде /stickban: {e}")
+        logger.error(f"Ошибка в команде stickban: {e}")
         bot.reply_to(message, "❌ Произошла ошибка. Убедитесь что бот - администратор!")
 
-@bot.message_handler(commands=['stickbanlist'])
-def stickbanlist_command(message):
-    """Команда /stickbanlist - список запрещенных паков"""
+def handle_stickbanlist_command(message):
+    """Команда stickbanlist - список запрещенных паков"""
     try:
         chat_id_str = str(message.chat.id)
         
         if chat_id_str in sticker_bot.banned_packs and sticker_bot.banned_packs[chat_id_str]:
             packs = "\n".join([f"• `{pack}`" for pack in sticker_bot.banned_packs[chat_id_str]])
             bot.reply_to(message,
-                f"📋 *Запрещенные стикер-паки в этом чате:*\n\n{packs}",
+                f"🌸 *Запрещенные стикер-паки в этом чате:* 🌸\n\n{packs}",
                 parse_mode='Markdown'
             )
         else:
-            bot.reply_to(message, "✅ В этом чате нет запрещенных стикер-паков.")
+            bot.reply_to(message, "🌸 В этом чате нет запрещенных стикер-паков. 🌸")
             
     except Exception as e:
-        logger.error(f"Ошибка в команде /stickbanlist: {e}")
+        logger.error(f"Ошибка в команде stickbanlist: {e}")
         bot.reply_to(message, "❌ Произошла ошибка")
 
-@bot.message_handler(commands=['stickunban'])
-def stickunban_command(message):
-    """Команда /stickunban - разблокировать пак (только для админов)"""
+def handle_stickunban_command(message):
+    """Команда stickunban - разблокировать пак (только для админов)"""
     try:
         # Проверяем что это группа
         if message.chat.type == 'private':
@@ -347,13 +358,22 @@ def stickunban_command(message):
             bot.reply_to(message, "❌ Эта команда только для администраторов чата!")
             return
         
-        # Получаем аргументы команды
-        if not message.text or len(message.text.split()) < 2:
-            bot.reply_to(message, "❌ Укажите название пака:\n`/stickunban pack_name`", parse_mode='Markdown')
+        # Получаем название пака из текста
+        text = message.text.lower()
+        
+        # Удаляем упоминание бота если есть
+        if f"@{BOT_USERNAME}".lower() in text:
+            text = text.replace(f"@{BOT_USERNAME}".lower(), "")
+        
+        # Удаляем команду из текста
+        for variant in ["stickunban", "стикunban", "стиканбан", "анбан"]:
+            text = text.replace(variant, "").strip()
+        
+        if not text:
+            bot.reply_to(message, "❌ Укажите название пака:\n`stickunban pack_name`", parse_mode='Markdown')
             return
         
-        # Извлекаем название пака
-        pack_name = ' '.join(message.text.split()[1:])
+        pack_name = text.strip()
         chat_id_str = str(message.chat.id)
         
         if chat_id_str in sticker_bot.banned_packs and pack_name in sticker_bot.banned_packs[chat_id_str]:
@@ -363,7 +383,7 @@ def stickunban_command(message):
             # Отправляем подтверждение (НЕ удаляем)
             bot.send_message(
                 message.chat.id,
-                f"✅ *Стикер-пак разблокирован!*\n\n"
+                f"🌸 *Стикер-пак разблокирован!* 🌸\n\n"
                 f"📛 *Название:* `{pack_name}`\n"
                 f"👤 *Администратор:* {message.from_user.first_name}",
                 parse_mode='Markdown'
@@ -373,8 +393,51 @@ def stickunban_command(message):
             bot.reply_to(message, "❌ Этот стикер-пак не был запрещён.")
             
     except Exception as e:
-        logger.error(f"Ошибка в команде /stickunban: {e}")
+        logger.error(f"Ошибка в команде stickunban: {e}")
         bot.reply_to(message, "❌ Произошла ошибка")
+
+@bot.message_handler(func=lambda message: True)
+def handle_text_messages(message):
+    """Обработчик текстовых сообщений (команд без /)"""
+    try:
+        text = message.text.strip()
+        
+        # Игнорируем пустые сообщения
+        if not text:
+            return
+        
+        # Проверяем команды без /
+        if check_command(text, ["stickban", "стикбан", "стикбен"]):
+            handle_stickban_command(message)
+        
+        elif check_command(text, ["stickbanlist", "стикбанлист", "списокстикеров", "стикбанлист"]):
+            handle_stickbanlist_command(message)
+        
+        elif check_command(text, ["stickunban", "стикunban", "стиканбан", "анбан"]):
+            # Для этой команды нужен дополнительный текст, поэтому обрабатываем в своей функции
+            handle_stickunban_command(message)
+        
+        elif check_command(text, ["unmute", "анмут", "размут", "разбан"]):
+            handle_unmute_command(message)
+        
+        # Также обрабатываем команды с упоминанием бота
+        elif f"@{BOT_USERNAME}" in text:
+            text_without_mention = text.replace(f"@{BOT_USERNAME}", "").strip().lower()
+            
+            if text_without_mention in ["stickban", "стикбан", "стикбен"]:
+                handle_stickban_command(message)
+            
+            elif text_without_mention in ["stickbanlist", "стикбанлист", "списокстикеров"]:
+                handle_stickbanlist_command(message)
+            
+            elif any(cmd in text_without_mention for cmd in ["stickunban", "стикunban", "стиканбан", "анбан"]):
+                handle_stickunban_command(message)
+            
+            elif text_without_mention in ["unmute", "анмут", "размут", "разбан"]:
+                handle_unmute_command(message)
+    
+    except Exception as e:
+        logger.error(f"Ошибка обработки текста: {e}")
 
 @bot.message_handler(content_types=['sticker'])
 def handle_sticker(message):
@@ -425,12 +488,12 @@ def handle_sticker(message):
             # Отправляем уведомление о муте (НЕ УДАЛЯЕМ ЕГО)
             bot.send_message(
                 message.chat.id,
-                f"🚫 *Нарушение правил!*\n\n"
+                f"🚫 *Нарушение правил!* 🌸\n\n"
                 f"👤 *Пользователь:* {message.from_user.first_name}\n"
                 f"⏰ *Наказание:* мут на 1 час\n"
                 f"📛 *Причина:* отправка запрещенного стикера\n"
                 f"🖼 *Пак:* `{pack_name}`\n\n"
-                f"_Администратор может снять мут командой /unmute_",
+                f"_Администратор может снять мут командой unmute_",
                 parse_mode='Markdown'
             )
             
@@ -444,7 +507,7 @@ def handle_sticker(message):
 def home():
     return jsonify({
         "status": "online",
-        "service": "Sticker Ban Bot",
+        "service": "🌸 Помощница Назуна-чан 🌸",
         "message": "✅ Сервис работает"
     })
 
@@ -486,7 +549,7 @@ def webhook_handler():
 
 # ========== ЗАПУСК СЕРВИСА ==========
 if __name__ == '__main__':
-    logger.info("🚀 Запуск бота...")
+    logger.info("🚀 Запуск 🌸 Помощницы Назуна-чан 🌸...")
     
     if bot and WEBHOOK_URL:
         try:
