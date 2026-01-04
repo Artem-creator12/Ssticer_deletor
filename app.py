@@ -113,10 +113,10 @@ def start_command(message):
             f"🌸 *Помощница Назуна-чан* 🌸\n\n"
             f"Привет, {message.from_user.first_name}!\n\n"
             "*Функции для админов:*\n"
-            "• `stickban` (ответ на стикер) - запретить пак\n"
-            "• `stickbanlist` - список запрещенных\n"
-            "• `stickunban <название>` - разблокировать\n"
-            "• `unmute @username` - снять мут с пользователя\n\n"
+            "• `стикбан` (ответ на стикер) - запретить пак\n"
+            "• `стикбанлист` - список запрещенных\n"
+            "• `стикразбан <название>` - разблокировать\n"
+            "• `размут @username` - снять мут с пользователя\n\n"
             "⚠️ *Наказание за нарушение:*\n"
             "Запрещенный стикер = удаление + мут 1 час\n\n"
             "⚡ Работает 24/7 на Render.com",
@@ -131,10 +131,10 @@ def help_command(message):
     help_text = (
         "📚 🌸 *Помощница Назуна-чан* 🌸 - Помощь\n\n"
         "*Только для администраторов:*\n"
-        "▫️ `stickban` (ответ на стикер) - запретить весь пак\n"
-        "▫️ `stickbanlist` - список запрещенных паков\n"
-        "▫️ `stickunban <название>` - разблокировать пак\n"
-        "▫️ `unmute @username` - снять мут с пользователя\n\n"
+        "▫️ `стикбан` (ответ на стикер) - запретить весь пак\n"
+        "▫️ `стикбанлист` - список запрещенных паков\n"
+        "▫️ `стикразбан <название>` - разблокировать пак\n"
+        "▫️ `размут @username` - снять мут с пользователя\n\n"
         "*Для всех:*\n"
         "▫️ /start - информация о боте\n"
         "▫️ /help - эта справка\n\n"
@@ -154,7 +154,7 @@ def help_command(message):
 # ========== ОБРАБОТКА ОБЫЧНЫХ КОМАНД (без /) ==========
 
 def handle_unmute_command(message):
-    """Команда unmute - снять мут с пользователя (только для админов)"""
+    """Команда размут - снять мут с пользователя (только для админов)"""
     try:
         # Проверяем что это группа
         if message.chat.type == 'private':
@@ -211,8 +211,8 @@ def handle_unmute_command(message):
             bot.reply_to(message, 
                 "❌ Не удалось определить пользователя.\n"
                 "Используйте:\n"
-                "• `unmute @username`\n"
-                "• Ответьте `unmute` на сообщение пользователя",
+                "• `размут @username`\n"
+                "• Ответьте `размут` на сообщение пользователя",
                 parse_mode='Markdown'
             )
             return
@@ -261,11 +261,11 @@ def handle_unmute_command(message):
             bot.reply_to(message, f"❌ Не удалось снять мут. Убедитесь что пользователь замучен и у бота есть права!")
             
     except Exception as e:
-        logger.error(f"Ошибка в команде unmute: {e}")
+        logger.error(f"Ошибка в команде размут: {e}")
         bot.reply_to(message, "❌ Произошла ошибка. Проверьте права бота!")
 
 def handle_stickban_command(message):
-    """Команда stickban - запретить стикер-пак (только для админов)"""
+    """Команда стикбан - запретить стикер-пак (только для админов)"""
     try:
         # Проверяем что это группа
         if message.chat.type == 'private':
@@ -324,11 +324,11 @@ def handle_stickban_command(message):
         logger.info(f"Пак '{pack_name}' запрещен в чате {chat_id_str} админом {message.from_user.id}")
         
     except Exception as e:
-        logger.error(f"Ошибка в команде stickban: {e}")
+        logger.error(f"Ошибка в команде стикбан: {e}")
         bot.reply_to(message, "❌ Произошла ошибка. Убедитесь что бот - администратор!")
 
 def handle_stickbanlist_command(message):
-    """Команда stickbanlist - список запрещенных паков"""
+    """Команда стикбанлист - список запрещенных паков"""
     try:
         chat_id_str = str(message.chat.id)
         
@@ -342,11 +342,11 @@ def handle_stickbanlist_command(message):
             bot.reply_to(message, "🌸 В этом чате нет запрещенных стикер-паков. 🌸")
             
     except Exception as e:
-        logger.error(f"Ошибка в команде stickbanlist: {e}")
+        logger.error(f"Ошибка в команде стикбанлист: {e}")
         bot.reply_to(message, "❌ Произошла ошибка")
 
 def handle_stickunban_command(message):
-    """Команда stickunban - разблокировать пак (только для админов)"""
+    """Команда стикразбан - разблокировать пак (только для админов)"""
     try:
         # Проверяем что это группа
         if message.chat.type == 'private':
@@ -366,11 +366,11 @@ def handle_stickunban_command(message):
             text = text.replace(f"@{BOT_USERNAME}".lower(), "")
         
         # Удаляем команду из текста
-        for variant in ["stickunban", "стикunban", "стиканбан", "анбан"]:
+        for variant in ["стикразбан", "стикразбан", "стикразбан"]:
             text = text.replace(variant, "").strip()
         
         if not text:
-            bot.reply_to(message, "❌ Укажите название пака:\n`stickunban pack_name`", parse_mode='Markdown')
+            bot.reply_to(message, "❌ Укажите название пака:\n`стикразбан название_пака`", parse_mode='Markdown')
             return
         
         pack_name = text.strip()
@@ -393,7 +393,7 @@ def handle_stickunban_command(message):
             bot.reply_to(message, "❌ Этот стикер-пак не был запрещён.")
             
     except Exception as e:
-        logger.error(f"Ошибка в команде stickunban: {e}")
+        logger.error(f"Ошибка в команде стикразбан: {e}")
         bot.reply_to(message, "❌ Произошла ошибка")
 
 @bot.message_handler(func=lambda message: True)
@@ -406,34 +406,37 @@ def handle_text_messages(message):
         if not text:
             return
         
-        # Проверяем команды без /
-        if check_command(text, ["stickban", "стикбан", "стикбен"]):
+        # Команда "стикбан" (запретить стикер-пак)
+        if check_command(text, ["стикбан", "Стикбан"]):
             handle_stickban_command(message)
         
-        elif check_command(text, ["stickbanlist", "стикбанлист", "списокстикеров", "стикбанлист"]):
+        # Команда "стикбанлист" (список запрещенных)
+        elif check_command(text, ["стикбанлист", "Стикбанлист"]):
             handle_stickbanlist_command(message)
         
-        elif check_command(text, ["stickunban", "стикunban", "стиканбан", "анбан"]):
+        # Команда "стикразбан" (разблокировать пак)
+        elif check_command(text, ["стикразбан", "Стикразбан"]):
             # Для этой команды нужен дополнительный текст, поэтому обрабатываем в своей функции
             handle_stickunban_command(message)
         
-        elif check_command(text, ["unmute", "анмут", "размут", "разбан"]):
+        # Команда "размут" (снять мут)
+        elif check_command(text, ["размут", "Размут"]):
             handle_unmute_command(message)
         
         # Также обрабатываем команды с упоминанием бота
         elif f"@{BOT_USERNAME}" in text:
             text_without_mention = text.replace(f"@{BOT_USERNAME}", "").strip().lower()
             
-            if text_without_mention in ["stickban", "стикбан", "стикбен"]:
+            if text_without_mention in ["стикбан", "стикбан"]:
                 handle_stickban_command(message)
             
-            elif text_without_mention in ["stickbanlist", "стикбанлист", "списокстикеров"]:
+            elif text_without_mention in ["стикбанлист", "стикбанлист"]:
                 handle_stickbanlist_command(message)
             
-            elif any(cmd in text_without_mention for cmd in ["stickunban", "стикunban", "стиканбан", "анбан"]):
+            elif any(cmd in text_without_mention for cmd in ["стикразбан", "стикразбан"]):
                 handle_stickunban_command(message)
             
-            elif text_without_mention in ["unmute", "анмут", "размут", "разбан"]:
+            elif text_without_mention in ["размут", "размут"]:
                 handle_unmute_command(message)
     
     except Exception as e:
@@ -493,7 +496,7 @@ def handle_sticker(message):
                 f"⏰ *Наказание:* мут на 1 час\n"
                 f"📛 *Причина:* отправка запрещенного стикера\n"
                 f"🖼 *Пак:* `{pack_name}`\n\n"
-                f"_Администратор может снять мут командой unmute_",
+                f"_Администратор может снять мут командой размут_",
                 parse_mode='Markdown'
             )
             
