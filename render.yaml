@@ -1,14 +1,16 @@
 services:
   - type: web
-    name: telegram-sticker-ban-bot
+    name: ssticer-deletor
     env: python
     region: frankfurt  # или singapore, oregon, ohio
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --worker-class aiohttp.GunicornWebWorker
+    startCommand: python app.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: PORT
         value: 10000
+      - key: RENDER_EXTERNAL_URL
+        value: https://ssticer-deletor.onrender.com
     healthCheckPath: /health
     autoDeploy: true
