@@ -1,0 +1,1 @@
+# Ssticer_deletor
