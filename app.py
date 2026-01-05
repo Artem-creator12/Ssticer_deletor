@@ -358,25 +358,40 @@ def handle_stickunban_command(message):
             bot.reply_to(message, "❌ Эта команда только для администраторов чата!")
             return
         
-        # Получаем название пака из текста
-        text = message.text.lower()
+        # Получаем текст сообщения
+        text = message.text.strip()
         
         # Удаляем упоминание бота если есть
-        if f"@{BOT_USERNAME}".lower() in text:
-            text = text.replace(f"@{BOT_USERNAME}".lower(), "")
+        if f"@{BOT_USERNAME}" in text:
+            text = text.replace(f"@{BOT_USERNAME}", "")
         
-        # Удаляем команду из текста
-        for variant in ["стикразбан", "стикразбан", "стикразбан"]:
-            text = text.replace(variant, "").strip()
+        # Извлекаем название пака (все после команды)
+        # Поддерживаем оба варианта: с заглавной и строчной буквы
+        if text.lower().startswith("стикразбан"):
+            pack_name = text[10:].strip()  # Убираем "стикразбан" (10 символов)
+        elif text.startswith("Стикразбан"):
+            pack_name = text[10:].strip()  # Убираем "Стикразбан" (10 символов)
+        else:
+            pack_name = text.strip()
         
-        if not text:
-            bot.reply_to(message, "❌ Укажите название пака:\n`стикразбан название_пака`", parse_mode='Markdown')
+        if not pack_name:
+            bot.reply_to(message, 
+                "❌ Укажите название пака для разблокировки!\n\n"
+                "Пример:\n"
+                "`стикразбан название_пака`\n\n"
+                "Название можно посмотреть в списке запрещенных: `стикбанлист`",
+                parse_mode='Markdown'
+            )
             return
         
-        pack_name = text.strip()
         chat_id_str = str(message.chat.id)
         
+        # Логируем для отладки
+        logger.info(f"Попытка разблокировать пак '{pack_name}' в чате {chat_id_str}")
+        logger.info(f"Текущие запрещенные паки: {sticker_bot.banned_packs.get(chat_id_str, [])}")
+        
         if chat_id_str in sticker_bot.banned_packs and pack_name in sticker_bot.banned_packs[chat_id_str]:
+            # Удаляем пак из запрещенных
             sticker_bot.banned_packs[chat_id_str].remove(pack_name)
             sticker_bot.save_data()
             
@@ -388,13 +403,23 @@ def handle_stickunban_command(message):
                 f"👤 *Администратор:* {message.from_user.first_name}",
                 parse_mode='Markdown'
             )
-            logger.info(f"Пак '{pack_name}' разблокирован в чате {chat_id_str} админом {message.from_user.id}")
+            logger.info(f"Пак '{pack_name}' успешно разблокирован в чате {chat_id_str} админом {message.from_user.id}")
         else:
-            bot.reply_to(message, "❌ Этот стикер-пак не был запрещён.")
+            # Если пак не найден, покажем точное название
+            if chat_id_str in sticker_bot.banned_packs:
+                available_packs = "\n".join([f"• `{pack}`" for pack in sticker_bot.banned_packs[chat_id_str]])
+                bot.reply_to(message,
+                    f"❌ Стикер-пак `{pack_name}` не найден в списке запрещенных.\n\n"
+                    f"*Текущие запрещенные паки:*\n{available_packs}\n\n"
+                    f"Проверьте название и попробуйте снова.",
+                    parse_mode='Markdown'
+                )
+            else:
+                bot.reply_to(message, "❌ В этом чате нет запрещенных стикер-паков.")
             
     except Exception as e:
         logger.error(f"Ошибка в команде стикразбан: {e}")
-        bot.reply_to(message, "❌ Произошла ошибка")
+        bot.reply_to(message, "❌ Произошла ошибка. Проверьте название пака!")
 
 @bot.message_handler(func=lambda message: True)
 def handle_text_messages(message):
@@ -415,8 +440,7 @@ def handle_text_messages(message):
             handle_stickbanlist_command(message)
         
         # Команда "стикразбан" (разблокировать пак)
-        elif check_command(text, ["стикразбан", "Стикразбан"]):
-            # Для этой команды нужен дополнительный текст, поэтому обрабатываем в своей функции
+        elif text.lower().startswith("стикразбан") or text.startswith("Стикразбан"):
             handle_stickunban_command(message)
         
         # Команда "размут" (снять мут)
@@ -425,18 +449,18 @@ def handle_text_messages(message):
         
         # Также обрабатываем команды с упоминанием бота
         elif f"@{BOT_USERNAME}" in text:
-            text_without_mention = text.replace(f"@{BOT_USERNAME}", "").strip().lower()
+            text_without_mention = text.replace(f"@{BOT_USERNAME}", "").strip()
             
-            if text_without_mention in ["стикбан", "стикбан"]:
+            if check_command(text_without_mention, ["стикбан", "Стикбан"]):
                 handle_stickban_command(message)
             
-            elif text_without_mention in ["стикбанлист", "стикбанлист"]:
+            elif check_command(text_without_mention, ["стикбанлист", "Стикбанлист"]):
                 handle_stickbanlist_command(message)
             
-            elif any(cmd in text_without_mention for cmd in ["стикразбан", "стикразбан"]):
+            elif text_without_mention.lower().startswith("стикразбан") or text_without_mention.startswith("Стикразбан"):
                 handle_stickunban_command(message)
             
-            elif text_without_mention in ["размут", "размут"]:
+            elif check_command(text_without_mention, ["размут", "Размут"]):
                 handle_unmute_command(message)
     
     except Exception as e:
